@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>[re]Stack Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #0c1c3a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      min-height: 100vh;
+      position: relative;
+    }
+    #floatingCanvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .centerbox {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      position: relative;
+    }
+    h1 {
+      font-size: 2.5rem;
+      letter-spacing: 2px;
+      margin-bottom: 1.2rem;
+      font-weight: 700;
+      text-shadow: 0 2px 12px #141e3b;
+    }
+    .instruction {
+      font-size: 1.2rem;
+      max-width: 350px;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      background: rgba(20,32,59,0.8);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 2px 12px #141e3b;
+    }
+    button, .restart-btn {
+      font-size: 1.2rem;
+      padding: 0.8em 2em;
+      margin-top: 18px;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 2px 14px #122659;
+      background: linear-gradient(90deg,#152658,#2c458c);
+      color: #fff;
+      font-weight: 600;
+      transition: background 0.2s;
+      cursor: pointer;
+      font-family: inherit;
+      outline: none;
+      letter-spacing: .8px;
+    }
+    button:hover, .restart-btn:hover {
+      background: linear-gradient(90deg,#2c458c,#152658);
+    }
+    #gameCanvas {
+      display: none;
+      background: transparent;
+      border-radius: 16px;
+      box-shadow: 0 4px 32px #101e3a;
+      margin-top: 20px;
+      position: relative;
+      z-index: 2;
+    }
+    .overlay {
+      position: absolute;
+      left: 0; right:0; top:0; bottom:0;
+      background: rgba(12,28,58,0.96);
+      color: #fff;
+      font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 3;
+      font-size: 1.05rem;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .score {
+      font-size: 1.05rem;
+      margin-top: 10px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="floatingCanvas"></canvas>
+  <div id="startScreen" class="centerbox">
+    <h1>[re]Stack Game</h1>
+    <div class="instruction">
+      gRe, your task is to stack as many octopuses in hats as possible.<br>
+      Watch out for them ca[RE]fully, some may be without hats and that won’t please you.
+    </div>
+    <button id="beginBtn">[re]Start</button>
+  </div>
+  <canvas id="gameCanvas" width="410" height="570"></canvas>
+  <div id="overlay" class="overlay hidden"></div>
+  <script>
+    
+    const startScreen = document.getElementById('startScreen');
+    const beginBtn = document.getElementById('beginBtn');
+    const gameCanvas = document.getElementById('gameCanvas');
+    const overlay = document.getElementById('overlay');
+    const ctx = gameCanvas.getContext('2d');
+    
+    const floatingCanvas = document.getElementById('floatingCanvas');
+    let fctx = floatingCanvas.getContext('2d');
+    
+    const images = {
+      player: new Image(),
+      octopus: new Image(),
+      enemy: new Image(),
+    };
+    images.player.src = '1.png';
+    images.octopus.src = '2.png';
+    images.enemy.src = '3.png';
+
+    
+    let floatSprites = [];
+    let floatingActive = true;
+    function resizeFloatingCanvas() {
+      floatingCanvas.width = window.innerWidth;
+      floatingCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeFloatingCanvas);
+
+    function createFloatSprites() {
+      floatSprites = [];
+      
+      let n1 = 12, n2 = 10;
+      for(let i=0;i<n1;i++) {
+        floatSprites.push({
+          img: images.octopus,
+          x: Math.random()*(window.innerWidth-60),
+          y: Math.random()*(window.innerHeight-60),
+          w: 52+Math.random()*16,
+          h: 52+Math.random()*16,
+          dx: (Math.random()-0.5)*2.5,
+          dy: (Math.random()-0.5)*2.5,
+        });
+      }
+      for(let i=0;i<n2;i++) {
+        floatSprites.push({
+          img: images.enemy,
+          x: Math.random()*(window.innerWidth-60),
+          y: Math.random()*(window.innerHeight-60),
+          w: 54+Math.random()*13,
+          h: 54+Math.random()*13,
+          dx: (Math.random()-0.5)*2.2,
+          dy: (Math.random()-0.5)*2.2,
+        });
+      }
+    }
+
+    function floatingLoop() {
+      if(!floatingActive) return;
+      fctx.clearRect(0,0,floatingCanvas.width,floatingCanvas.height);
+      for(let sp of floatSprites) {
+        sp.x += sp.dx;
+        sp.y += sp.dy;
+        
+        if(sp.x < 0 || sp.x + sp.w > floatingCanvas.width) sp.dx = -sp.dx;
+        if(sp.y < 0 || sp.y + sp.h > floatingCanvas.height) sp.dy = -sp.dy;
+        fctx.drawImage(sp.img, sp.x, sp.y, sp.w, sp.h);
+      }
+      requestAnimationFrame(floatingLoop);
+    }
+
+    
+    resizeFloatingCanvas();
+    createFloatSprites();
+    images.octopus.onload = () => { createFloatSprites(); }; 
+    images.enemy.onload = () => { createFloatSprites(); };
+    floatingLoop();
+
+    
+    const canvasW = gameCanvas.width;
+    const canvasH = gameCanvas.height;
+    const playerY = canvasH - 90;
+    const playerWidth = 80;
+    const playerHeight = 80;
+    const bulletWidth = 12;
+    const bulletHeight = 28;
+    let running = false, player, fallingItems, bullets, score, speed, nextSpeedBoost, frame, pressed, resultStatus, bulletCount;
+
+    function showOverlay(msg1, msg2, showRestart) {
+      overlay.innerHTML = `<h1>${msg1}</h1>
+        <div class="score">${msg2}</div>
+        ${showRestart ? `<button class="restart-btn">[re]Start</button>` : ''}`;
+      overlay.classList.remove('hidden');
+      if(showRestart) overlay.querySelector("button").onclick = restartAll;
+    }
+    function hideOverlay() { overlay.classList.add('hidden'); }
+
+    beginBtn.onclick = function() {
+      startScreen.style.display = 'none';
+      gameCanvas.style.display = 'block';
+      floatingActive = false;
+      floatingCanvas.style.display = 'none';
+      startGame();
+    };
+    function restartAll() {
+      overlay.classList.add('hidden');
+      startScreen.style.display = 'flex';
+      gameCanvas.style.display = 'none';
+      floatingActive = true;
+      floatingCanvas.style.display = 'block';
+      resizeFloatingCanvas();
+      createFloatSprites();
+      floatingLoop();
+    }
+    function startGame() {
+      player = { x: canvasW/2-playerWidth/2, y: playerY, dx:0 };
+      pressed = {};
+      fallingItems = [];
+      bullets = [];
+      score = 0;
+      speed = 3;
+      nextSpeedBoost = 10;
+      frame = 0;
+      bulletCount = 5; 
+      running = true;
+      resultStatus = null;
+      hideOverlay();
+      window.focus();
+      requestAnimationFrame(gameLoop);
+    }
+    document.addEventListener('keydown', function(e) {
+      if(!running) return;
+      if (e.code === "ArrowLeft" || e.key === "a" || e.key === "A") pressed.left = true;
+      if (e.code === "ArrowRight" || e.key === "d" || e.key === "D") pressed.right = true;
+      if (e.code === "Space") {
+        
+        if (bulletCount > 0) {
+          bulletCount--;
+          bullets.push({
+            x: player.x + playerWidth / 2 - bulletWidth / 2,
+            y: player.y - bulletHeight,
+            w: bulletWidth,
+            h: bulletHeight
+          });
+        }
+      }
+    });
+    document.addEventListener('keyup', function(e) {
+      if (e.code === "ArrowLeft" || e.key === "a" || e.key === "A") pressed.left = false;
+      if (e.code === "ArrowRight" || e.key === "d" || e.key === "D") pressed.right = false;
+    });
+    function gameLoop() {
+      if(!running) return;
+      frame++;
+      
+      if(pressed.left) player.x -= 7;
+      if(pressed.right) player.x += 7;
+      player.x = Math.max(0, Math.min(canvasW-playerWidth, player.x));
+      
+      if(frame%40 === 0) {
+        let t;
+        let r = Math.random();
+        if(r<0.6) t = 'octopus'; else t = 'enemy';
+        const w = 56, h = 56;
+        const item = {
+          type: t,
+          x: Math.random()*(canvasW - w),
+          y: -h,
+          w, h,
+        };
+        fallingItems.push(item);
+      }
+      
+      ctx.clearRect(0,0,canvasW,canvasH);
+      
+      ctx.drawImage(images.player, player.x, player.y, playerWidth, playerHeight);
+      
+      ctx.font = "24px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Score: "+score+"   Bullets: "+bulletCount, 20, 38);
+      
+      for(let i=bullets.length-1;i>=0;i--) {
+        let b = bullets[i];
+        b.y -= 15;
+        ctx.fillStyle = "#b4daff";
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        if(b.y + b.h < 0) bullets.splice(i, 1);
+      }
+      
+      for(const obj of fallingItems) {
+        if(obj.type === 'octopus')
+          ctx.drawImage(images.octopus, obj.x, obj.y, obj.w, obj.h);
+        else
+          ctx.drawImage(images.enemy, obj.x, obj.y, obj.w, obj.h);
+      }
+      
+      for(let i=fallingItems.length-1;i>=0;i--) {
+        const obj = fallingItems[i];
+        obj.y += speed;
+        
+        if(obj.type === 'enemy') {
+          for(let j=bullets.length-1;j>=0;j--) {
+            let b = bullets[j];
+            if(b.x < obj.x + obj.w && b.x + b.w > obj.x && b.y < obj.y + obj.h && b.y + b.h > obj.y) {
+              fallingItems.splice(i,1); 
+              bullets.splice(j,1); 
+              break;
+            }
+          }
+        }
+        
+        if(obj.y+obj.h > player.y && obj.x < player.x+playerWidth && obj.x+obj.w > player.x && obj.y < player.y+playerHeight) {
+          if(obj.type === 'octopus') {
+            score += 1;
+            fallingItems.splice(i,1);
+          } else {
+            score -= 5;
+            fallingItems.splice(i,1);
+            if(score<0) {
+              running = false;
+              resultStatus = 'minus';
+              showOverlay("Game Ov[er]", "Your sco[RE] is less than 0, so you've lost.", true);
+              return;
+            }
+          }
+        } else if(obj.y > canvasH) {
+          
+          if(obj.type==="octopus") {
+            running = false;
+            resultStatus = 'missed';
+            showOverlay("You missed a friendly squid!", "Your final sco[RE]: "+score, true);
+            return;
+          } else
+            fallingItems.splice(i,1); 
+        }
+      }
+      
+      if(score >= nextSpeedBoost && score < 50) {
+        speed *= 1.5;
+        nextSpeedBoost += 10;
+      }
+      
+      if(score >= 50) {
+        running = false;
+        resultStatus = 'win';
+        showOverlay("You stacked 50 octopuses!", "Victory! Your final score: "+score, true);
+        return;
+      }
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>
+
